@@ -1,26 +1,37 @@
-CC=g++
-CDEFINES=
-SOURCES=Dispatcher.cpp eradicate2.cpp hexadecimal.cpp ModeFactory.cpp Speed.cpp sha3.cpp
-OBJECTS=$(SOURCES:.cpp=.o)
-EXECUTABLE=ERADICATE2.x64
+CXX      ?= g++
+CXXFLAGS ?= -std=c++11 -Wall -O2
+CPPFLAGS ?=
+LDFLAGS  :=
 
+SOURCES    := Dispatcher.cpp eradicate2.cpp hexadecimal.cpp ModeFactory.cpp Speed.cpp sha3.cpp
+OBJECTS    := $(SOURCES:.cpp=.o)
+DEPS       := $(OBJECTS:.o=.d)
+EXECUTABLE := ERADICATE2.x64
+
+# OpenCL ships as a framework on macOS, and as -lOpenCL elsewhere.
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-	LDFLAGS=-framework OpenCL
-	CFLAGS=-c -std=c++11 -Wall -mmmx -O2
+	LDLIBS := -framework OpenCL
 else
-	LDFLAGS=-s -lOpenCL -mcmodel=large
-	CFLAGS=-c -std=c++11 -Wall -mmmx -O2 -mcmodel=large 
+	LDLIBS   := -lOpenCL
+	LDFLAGS  += -s
+	CXXFLAGS += -mcmodel=large
 endif
 
-all: $(SOURCES) $(EXECUTABLE)
+.PHONY: all clean
+
+all: $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS)
-	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
+	$(CXX) $(LDFLAGS) $(OBJECTS) $(LDLIBS) -o $@
 
-.cpp.o:
-	$(CC) $(CFLAGS) $(CDEFINES) $< -o $@
+# -MMD -MP emits a per-object .d file of header prerequisites, which we -include
+# below. Editing a header (help.hpp, version.hpp, ...) then recompiles exactly the
+# objects that include it — no more stale builds / manual `make clean`.
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -MMD -MP -c $< -o $@
+
+-include $(DEPS)
 
 clean:
-	rm -rf *.o
-
+	rm -f $(OBJECTS) $(DEPS) $(EXECUTABLE)

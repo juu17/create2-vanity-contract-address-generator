@@ -1,5 +1,7 @@
 #include "ModeFactory.hpp"
 
+#include <algorithm>
+
 #include "hexadecimal.hpp"
 
 mode ModeFactory::benchmark() {
@@ -27,7 +29,7 @@ mode ModeFactory::matching(const std::string strHex) {
 
 	auto index = 0;
 	
-	for( size_t i = 0; i < strHex.size(); i += 2 ) {
+	for( size_t i = 0; i < strHex.size() && static_cast<size_t>(index) < sizeof(r.data1); i += 2 ) {
 		const auto indexHi = hexValueNoException(strHex[i]);
 		const auto indexLo = i + 1 < strHex.size() ? hexValueNoException(strHex[i+1]) : std::string::npos;
 

@@ -23,10 +23,14 @@
 #include "types.hpp"
 #include "help.hpp"
 #include "sha3.hpp"
+#include "version.hpp"
 
 std::string readFile(const char * const szFilename)
 {
 	std::ifstream in(szFilename, std::ios::in | std::ios::binary);
+	if (!in.is_open()) {
+		throw std::runtime_error(std::string("failed to open file: ") + szFilename);
+	}
 	std::ostringstream contents;
 	contents << in.rdbuf();
 	return contents.str();
@@ -176,6 +180,7 @@ std::string makePreprocessorInitHashExpression(const std::string & strAddressBin
 
 int main(int argc, char * * argv) {
 	try {
+		std::cout << "ERADICATE2 " << ERADICATE2_VERSION << std::endl;
 		ArgParser argp(argc, argv);
 		bool bHelp = false;
 		bool bModeBenchmark = false;
@@ -198,6 +203,7 @@ int main(int argc, char * * argv) {
 		std::string strAddress;
 		std::string strInitCode;
 		std::string strInitCodeFile;
+		std::string strInitCodeHash;
 
 		argp.addSwitch('h', "help", bHelp);
 		argp.addSwitch('0', "benchmark", bModeBenchmark);
@@ -220,6 +226,7 @@ int main(int argc, char * * argv) {
 		argp.addSwitch('A', "address", strAddress);
 		argp.addSwitch('I', "init-code", strInitCode);
 		argp.addSwitch('i', "init-code-file", strInitCodeFile);
+		argp.addSwitch('H', "init-code-hash", strInitCodeHash);
 
 		if (!argp.parse()) {
 			std::cout << "error: bad arguments, try again :<" << std::endl;
@@ -242,9 +249,30 @@ int main(int argc, char * * argv) {
 		}
 
 		trim(strInitCode);
+		trim(strInitCodeHash);
 		const std::string strAddressBinary = parseHexadecimalBytes(strAddress);
-		const std::string strInitCodeBinary = parseHexadecimalBytes(strInitCode);
-		const std::string strInitCodeDigest = keccakDigest(strInitCodeBinary);
+		if (strAddressBinary.size() != 20) {
+			std::cout << "error: --address must be exactly 20 bytes (40 hex chars, 0x-prefixed)" << std::endl;
+			return 1;
+		}
+
+		// Init-code digest for the CREATE2 preimage, supplied one of two ways:
+		//   -H/--init-code-hash : the 32-byte keccak256(init code) DIRECTLY, used as-is with
+		//                         NO internal re-hash (keeps the argument short — 64 hex chars —
+		//                         and avoids the double-hash trap of feeding a hash to -I/-i).
+		//   -I / -i             : the RAW init code (creation bytecode), which we keccak256 here.
+		// -H takes precedence if both are supplied.
+		std::string strInitCodeDigest;
+		if (strInitCodeHash != "") {
+			strInitCodeDigest = parseHexadecimalBytes(strInitCodeHash);
+			if (strInitCodeDigest.size() != 32) {
+				std::cout << "error: --init-code-hash must be exactly 32 bytes (64 hex chars, 0x-prefixed)" << std::endl;
+				return 1;
+			}
+		} else {
+			strInitCodeDigest = keccakDigest(parseHexadecimalBytes(strInitCode));
+		}
+
 		const std::string strPreprocessorInitStructure = makePreprocessorInitHashExpression(strAddressBinary, strInitCodeDigest);
 
 		mode mode = ModeFactory::benchmark();
@@ -261,6 +289,10 @@ int main(int argc, char * * argv) {
 		} else if (!strModeLeading.empty()) {
 			mode = ModeFactory::leading(strModeLeading.front());
 		} else if (!strModeMatching.empty()) {
+			if (strModeMatching.size() > 40) {
+				std::cout << "error: --matching pattern must be at most 40 characters (20 bytes)" << std::endl;
+				return 1;
+			}
 			mode = ModeFactory::matching(strModeMatching);
 		} else if (bModeLeadingRange) {
 			mode = ModeFactory::leadingRange(rangeMin, rangeMax);

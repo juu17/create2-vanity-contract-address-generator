@@ -1,0 +1,10 @@
+.history
+.DS_Store
+
+# Build outputs
+*.o
+*.d
+ERADICATE2.x64
+
+# Runtime logs
+screenlog.0
